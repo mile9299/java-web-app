@@ -1,17 +1,32 @@
 pipeline {
-  agent { label 'linux' }
-  options {
-    buildDiscarder(logRotator(numToKeepStr: '5'))
-  }
-  stages {
+stages {
     stage('Build') {
       steps {
         sh 'docker build -t darinpope/java-web-app:latest .'
       }
     }
-    stage('Scan') {
+  agent any
+  stages {
+    stage('Aqua scanner') {
+      agent {
+        docker {
+          image 'aquasec/aqua-scanner'    
+        }
+      }
       steps {
-        sh 'trivy darinpope/java-web-app:latest'
+        withCredentials([
+          string(credentialsId: 'AQUA_KEY', variable: 'AQUA_KEY'),
+          string(credentialsId: 'AQUA_SECRET', variable: 'AQUA_SECRET'),
+          usernamePassword(credentialsId: 'PROVIDER_CREDENTIALS', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')
+        ]){
+          sh '''
+            export TRIVY_RUN_AS_PLUGIN=aqua
+            trivy fs --security-checks config,vuln,secret .
+            # To customize which severities to scan for, add the following flag: --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+            # To enable SAST scanning, add: --sast
+            # To enable npm/dotnet non-lock file scanning, add: --package-json / --dotnet-proj
+          '''
+        }
       }
     }
   }
